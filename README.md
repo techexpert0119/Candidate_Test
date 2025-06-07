@@ -5,7 +5,7 @@ A full-stack application for managing and displaying user data with filtering an
 ## Tech Stack
 
 ### Backend
-- .NET 7 Web API
+- .NET 8 Web API
 - Parquet file handling
 - In-memory caching
 - CORS enabled
@@ -21,8 +21,7 @@ A full-stack application for managing and displaying user data with filtering an
 
 ### Backend
 1. Navigate to `UserDataApp.API` directory
-2. Update `appsettings.json` with your Parquet file path
-3. Run:
+2. Run:
 ```bash
 dotnet restore
 dotnet run
