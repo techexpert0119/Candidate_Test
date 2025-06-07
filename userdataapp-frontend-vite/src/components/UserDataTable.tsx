@@ -185,10 +185,7 @@ const UserDataTable: React.FC<UserDataTableProps> = ({
           component="div"
           count={totalCount}
           page={page - 1}
-          onPageChange={(_event, newPage) => {
-            console.log("newPage:", newPage);
-            onPageChange(newPage + 1);
-          }}
+          onPageChange={(_event, newPage) => onPageChange(newPage + 1)}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(event) =>
             onRowsPerPageChange(parseInt(event.target.value, 10))

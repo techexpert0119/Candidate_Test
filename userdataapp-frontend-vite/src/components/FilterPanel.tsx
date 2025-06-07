@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, TextField, MenuItem, Slider, Typography } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers";
 import { useDebounce } from "../hooks/useDebounce";
 import type { FilterOptions } from "../types/userData";
+import Select from "react-select";
+import type { SingleValue } from "react-select";
+import countryList from "react-select-country-list";
 
 interface FilterPanelProps {
   filters: FilterOptions;
   onFilterChange: (filters: FilterOptions) => void;
-  uniqueGenders: string[];
-  uniqueCountries: string[];
 }
 
 const FilterPanel: React.FC<FilterPanelProps> = ({
   filters,
   onFilterChange,
-  uniqueGenders,
-  uniqueCountries,
 }) => {
   const [localFilters, setLocalFilters] = useState<FilterOptions>(filters);
+  const countryOptions = useMemo(() => countryList().getData(), []);
   const debouncedFilters = useDebounce(localFilters, 500);
 
   useEffect(() => {
@@ -38,6 +38,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           [field]: event.target.value || undefined,
         }));
       },
+    []
+  );
+
+  const handleCountryChange = useCallback(
+    (selectedOption: SingleValue<{ value: string; label: string }>) => {
+      setLocalFilters((prev) => ({
+        ...prev,
+        country: selectedOption?.label || undefined,
+      }));
+    },
     []
   );
 
@@ -144,11 +154,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             onChange={handleChange("gender")}
           >
             <MenuItem value="">All</MenuItem>
-            {uniqueGenders.map((gender) => (
-              <MenuItem key={gender} value={gender}>
-                {gender}
-              </MenuItem>
-            ))}
+            <MenuItem key={"Male"} value={"Male"}>
+              Male
+            </MenuItem>
+            <MenuItem key={"Female"} value={"Female"}>
+              Female
+            </MenuItem>
           </TextField>
         </Box>
         <Box
@@ -156,21 +167,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             width: { xs: "100%", sm: "calc(50% - 8px)", md: "calc(20% - 8px)" },
           }}
         >
-          <TextField
-            select
-            fullWidth
-            size="small"
-            label="Country"
-            value={localFilters.country || ""}
-            onChange={handleChange("country")}
-          >
-            <MenuItem value="">All</MenuItem>
-            {uniqueCountries.map((country) => (
-              <MenuItem key={country} value={country}>
-                {country}
-              </MenuItem>
-            ))}
-          </TextField>
+          <Select
+            options={countryOptions}
+            value={
+              countryOptions.find(
+                (option) => option.label === localFilters.country
+              ) || null
+            }
+            onChange={handleCountryChange}
+            isClearable
+          />
         </Box>
       </Box>
       <Box sx={{ mt: 2 }}>

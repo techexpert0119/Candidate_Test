@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from "react";
 import { Container } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -10,8 +9,6 @@ import type { SearchOptions, FilterOptions } from "./types/userData";
 
 function App() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [uniqueGenders, setUniqueGenders] = useState<string[]>([]);
-  const [uniqueCountries, setUniqueCountries] = useState<string[]>([]);
 
   const page = parseInt(searchParams.get("page") || "1");
   const rowsPerPage = parseInt(searchParams.get("pageSize") || "10");
@@ -41,19 +38,6 @@ function App() {
     queryKey: ["users", page, rowsPerPage, searchOptions, filterOptions],
     queryFn: () => getAllUsers(page, rowsPerPage, searchOptions, filterOptions),
   });
-
-  useEffect(() => {
-    if (data?.data) {
-      const genders = new Set<string>();
-      const countries = new Set<string>();
-      data.data.forEach((user) => {
-        if (user.gender) genders.add(user.gender);
-        if (user.country) countries.add(user.country);
-      });
-      setUniqueGenders(Array.from(genders));
-      setUniqueCountries(Array.from(countries));
-    }
-  }, [data?.data]);
 
   const updateSearchParams = (updates: Record<string, string | undefined>) => {
     const newParams = new URLSearchParams(searchParams);
@@ -111,8 +95,6 @@ function App() {
       <FilterPanel
         filters={filterOptions}
         onFilterChange={handleFilterChange}
-        uniqueGenders={uniqueGenders}
-        uniqueCountries={uniqueCountries}
       />
       <UserDataTable
         users={data?.data || []}
