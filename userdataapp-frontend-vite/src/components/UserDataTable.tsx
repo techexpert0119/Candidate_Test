@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import {
+  Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   TablePagination,
   Box,
   TextField,
@@ -41,12 +41,6 @@ const UserDataTable: React.FC<UserDataTableProps> = ({
     setPageInput(page.toString());
   }, [page]);
 
-  const handlePageInputChange = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setPageInput(event.target.value);
-  };
-
   const handlePageInputSubmit = () => {
     const newPage = parseInt(pageInput) - 1;
     if (
@@ -60,10 +54,20 @@ const UserDataTable: React.FC<UserDataTableProps> = ({
     }
   };
 
+  const handlePageInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setPageInput(event.target.value);
+  };
+
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
       handlePageInputSubmit();
     }
+  };
+
+  const calculateRowNumber = (index: number) => {
+    return page * rowsPerPage + index + 1;
   };
 
   const renderSkeletonRows = () => {
@@ -104,17 +108,26 @@ const UserDataTable: React.FC<UserDataTableProps> = ({
           <TableCell>
             <Skeleton animation="wave" />
           </TableCell>
+          <TableCell>
+            <Skeleton animation="wave" />
+          </TableCell>
         </TableRow>
       ));
   };
 
   return (
-    <Paper>
-      <TableContainer>
-        <Table>
+    <Paper sx={{ width: "100%", overflow: "hidden" }}>
+      <TableContainer sx={{ maxHeight: 440 }}>
+        <Table stickyHeader aria-label="sticky table">
           <TableHead>
             <TableRow>
-              <TableCell>ID</TableCell>
+              <TableCell
+                key="no"
+                align="left"
+                style={{ minWidth: 50, fontWeight: "bold" }}
+              >
+                No.
+              </TableCell>
               <TableCell>First Name</TableCell>
               <TableCell>Last Name</TableCell>
               <TableCell>Email</TableCell>
@@ -128,27 +141,37 @@ const UserDataTable: React.FC<UserDataTableProps> = ({
             </TableRow>
           </TableHead>
           <TableBody>
-            {isLoading
-              ? renderSkeletonRows()
-              : users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>{user.id}</TableCell>
-                    <TableCell>{user.firstName}</TableCell>
-                    <TableCell>{user.lastName}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.gender}</TableCell>
-                    <TableCell>{user.country}</TableCell>
-                    <TableCell>
-                      {new Date(user.registrationDate).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(user.birthDate).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>${user.salary.toLocaleString()}</TableCell>
-                    <TableCell>{user.title}</TableCell>
-                    <TableCell>{user.comments}</TableCell>
-                  </TableRow>
-                ))}
+            {isLoading ? (
+              renderSkeletonRows()
+            ) : users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={12} align="center">
+                  No data available
+                </TableCell>
+              </TableRow>
+            ) : (
+              users.map((user, index) => (
+                <TableRow hover role="checkbox" tabIndex={-1} key={user.email}>
+                  <TableCell align="left">
+                    {calculateRowNumber(index)}
+                  </TableCell>
+                  <TableCell>{user.firstName}</TableCell>
+                  <TableCell>{user.lastName}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.gender}</TableCell>
+                  <TableCell>{user.country}</TableCell>
+                  <TableCell>
+                    {new Date(user.registrationDate).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    {new Date(user.birthDate).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>${user.salary.toLocaleString()}</TableCell>
+                  <TableCell>{user.title}</TableCell>
+                  <TableCell>{user.comments}</TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
