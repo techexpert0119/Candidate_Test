@@ -1,4 +1,8 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using UserDataApp.API.Services;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,19 +13,27 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
 
-// Add CORS
+// Configure Parquet file path
+var parquetFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "userdata.parquet");
+if (!File.Exists(parquetFilePath))
+{
+    throw new FileNotFoundException($"Parquet file not found at: {parquetFilePath}");
+}
+builder.Configuration["ParquetFilePath"] = parquetFilePath;
+
+// Register services
+builder.Services.AddScoped<IUserDataService, UserDataService>();
+
+// Configure CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend", policy =>
+    options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:5173") // Vite's default port
+        policy.AllowAnyOrigin()
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
 });
-
-// Register services
-builder.Services.AddScoped<IUserDataService, UserDataService>();
 
 var app = builder.Build();
 
@@ -32,10 +44,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Use CORS before other middleware
-app.UseCors("AllowFrontend");
-
 app.UseHttpsRedirection();
+app.UseCors();
 app.UseAuthorization();
 app.MapControllers();
 

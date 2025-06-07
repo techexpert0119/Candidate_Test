@@ -3,6 +3,7 @@ using Parquet;
 using Parquet.Data;
 using System.Data;
 using UserDataApp.API.Models;
+using Parquet.Schema;
 
 namespace UserDataApp.API.Services
 {
@@ -58,7 +59,8 @@ namespace UserDataApp.API.Services
     {
       try
       {
-        var allUsers = await ReadParquetFileAsync();
+        var dataTable = await ReadParquetFileAsync();
+        var allUsers = ConvertDataTableToUserData(dataTable);
 
         // Apply filters
         var filteredUsers = allUsers.Where(user =>
@@ -104,7 +106,7 @@ namespace UserDataApp.API.Services
 
     private async Task<DataTable> ReadParquetFileAsync()
     {
-      if (_cache.TryGetValue(CACHE_KEY, out DataTable cachedData))
+      if (_cache.TryGetValue(CACHE_KEY, out DataTable? cachedData) && cachedData != null)
       {
         return cachedData;
       }
@@ -123,7 +125,14 @@ namespace UserDataApp.API.Services
       var schema = reader.Schema;
       foreach (var field in schema.Fields)
       {
-        dataTable.Columns.Add(field.Name, GetClrType(field.DataType));
+        if (field is DataField dataField)
+        {
+          dataTable.Columns.Add(field.Name, dataField.ClrType);
+        }
+        else
+        {
+          dataTable.Columns.Add(field.Name, typeof(string));
+        }
       }
 
       // Read data
@@ -140,8 +149,12 @@ namespace UserDataApp.API.Services
           for (int k = 0; k < dataFields.Length; k++)
           {
             var field = dataFields[k];
-            var dataColumn = await rowGroupReader.ReadColumnAsync(field);
-            row[field.Name] = dataColumn.Data.GetValue(j);
+            if (field is DataField dataField)
+            {
+              var dataColumn = await rowGroupReader.ReadColumnAsync(dataField);
+              var value = dataColumn.Data.GetValue(j);
+              row[field.Name] = value ?? DBNull.Value;
+            }
           }
           dataTable.Rows.Add(row);
         }
@@ -157,33 +170,39 @@ namespace UserDataApp.API.Services
       return dataTable;
     }
 
-    private Type GetClrType(Parquet.Data.DataType dataType)
+    private List<UserData> ConvertDataTableToUserData(DataTable dataTable)
     {
-      switch (dataType)
+      var users = new List<UserData>();
+      foreach (DataRow row in dataTable.Rows)
       {
-        case Parquet.Data.DataType.Int32:
-          return typeof(int);
-        case Parquet.Data.DataType.Int64:
-          return typeof(long);
-        case Parquet.Data.DataType.Float:
-          return typeof(float);
-        case Parquet.Data.DataType.Double:
-          return typeof(double);
-        case Parquet.Data.DataType.Boolean:
-          return typeof(bool);
-        case Parquet.Data.DataType.String:
-          return typeof(string);
-        case Parquet.Data.DataType.Date:
-          return typeof(DateTime);
-        case Parquet.Data.DataType.Time:
-          return typeof(TimeSpan);
-        case Parquet.Data.DataType.Timestamp:
-          return typeof(DateTime);
-        case Parquet.Data.DataType.Decimal:
-          return typeof(decimal);
-        default:
-          throw new NotSupportedException($"Data type {dataType} is not supported");
+        var birthdateStr = Convert.ToString(row["birthdate"]);
+        DateTime birthdate;
+        if (string.IsNullOrEmpty(birthdateStr) || !DateTime.TryParse(birthdateStr, out birthdate))
+        {
+          birthdate = DateTime.Now; // Default to current date if parsing fails
+        }
+
+        decimal salary = 0;
+        if (row["salary"] != DBNull.Value)
+        {
+          salary = Convert.ToDecimal(row["salary"]);
+        }
+
+        users.Add(new UserData
+        {
+          FirstName = Convert.ToString(row["first_name"]) ?? string.Empty,
+          LastName = Convert.ToString(row["last_name"]) ?? string.Empty,
+          Email = Convert.ToString(row["email"]) ?? string.Empty,
+          Gender = Convert.ToString(row["gender"]) ?? string.Empty,
+          Country = Convert.ToString(row["country"]) ?? string.Empty,
+          Title = Convert.ToString(row["title"]) ?? string.Empty,
+          Comments = Convert.ToString(row["comments"]) ?? string.Empty,
+          RegistrationDate = DateTime.Now, // Since this isn't in the Parquet file, we'll use current date
+          BirthDate = birthdate,
+          Salary = salary
+        });
       }
+      return users;
     }
   }
 }

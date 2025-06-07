@@ -151,7 +151,7 @@ const UserDataTable: React.FC<UserDataTableProps> = ({
               </TableRow>
             ) : (
               users.map((user, index) => (
-                <TableRow hover role="checkbox" tabIndex={-1} key={user.email}>
+                <TableRow hover role="checkbox" tabIndex={-1} key={index}>
                   <TableCell align="left">
                     {calculateRowNumber(index)}
                   </TableCell>
