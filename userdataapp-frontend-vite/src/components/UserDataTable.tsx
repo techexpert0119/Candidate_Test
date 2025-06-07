@@ -67,7 +67,7 @@ const UserDataTable: React.FC<UserDataTableProps> = ({
   };
 
   const calculateRowNumber = (index: number) => {
-    return page * rowsPerPage + index + 1;
+    return (page - 1) * rowsPerPage + index + 1;
   };
 
   const renderSkeletonRows = () => {
