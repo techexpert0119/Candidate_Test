@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Caching.Memory;
 using Parquet;
 using Parquet.Data;
+using System.Data;
 using UserDataApp.API.Models;
 
 namespace UserDataApp.API.Services
@@ -26,11 +28,15 @@ namespace UserDataApp.API.Services
 
   public class UserDataService : IUserDataService
   {
-    private readonly string _parquetFilePath;
+    private readonly IConfiguration _configuration;
+    private readonly IMemoryCache _cache;
+    private const string CACHE_KEY = "UserDataTable";
+    private readonly TimeSpan CACHE_DURATION = TimeSpan.FromMinutes(30);
 
-    public UserDataService(IConfiguration configuration)
+    public UserDataService(IConfiguration configuration, IMemoryCache cache)
     {
-      _parquetFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "userdata.parquet");
+      _configuration = configuration;
+      _cache = cache;
     }
 
     public async Task<PaginatedResponse<UserData>> GetAllUsersAsync(
@@ -96,99 +102,88 @@ namespace UserDataApp.API.Services
       }
     }
 
-    private async Task<IEnumerable<UserData>> ReadParquetFileAsync()
+    private async Task<DataTable> ReadParquetFileAsync()
     {
-      var users = new List<UserData>();
-
-      if (!File.Exists(_parquetFilePath))
+      if (_cache.TryGetValue(CACHE_KEY, out DataTable cachedData))
       {
-        throw new FileNotFoundException($"Parquet file not found at: {_parquetFilePath}");
+        return cachedData;
       }
 
-      using (var stream = File.OpenRead(_parquetFilePath))
+      var filePath = _configuration["ParquetFilePath"];
+      if (string.IsNullOrEmpty(filePath))
       {
-        using var reader = await ParquetReader.CreateAsync(stream);
-        var rowGroupCount = reader.RowGroupCount;
+        throw new InvalidOperationException("Parquet file path is not configured");
+      }
 
-        for (int i = 0; i < rowGroupCount; i++)
+      using var stream = File.OpenRead(filePath);
+      using var reader = await ParquetReader.CreateAsync(stream);
+      var dataTable = new DataTable();
+
+      // Read schema and create columns
+      var schema = reader.Schema;
+      foreach (var field in schema.Fields)
+      {
+        dataTable.Columns.Add(field.Name, GetClrType(field.DataType));
+      }
+
+      // Read data
+      var rowGroupCount = reader.RowGroupCount;
+      for (int i = 0; i < rowGroupCount; i++)
+      {
+        using var rowGroupReader = reader.OpenRowGroupReader(i);
+        var rowCount = rowGroupReader.RowCount;
+        var dataFields = schema.Fields.ToArray();
+
+        for (int j = 0; j < rowCount; j++)
         {
-          using var rowGroupReader = reader.OpenRowGroupReader(i);
-          var schema = reader.Schema;
-          var dataFields = schema.GetDataFields();
-          var columns = new Dictionary<string, Array>(StringComparer.OrdinalIgnoreCase);
-
-          foreach (var field in dataFields)
+          var row = dataTable.NewRow();
+          for (int k = 0; k < dataFields.Length; k++)
           {
-            var column = await rowGroupReader.ReadColumnAsync(field);
-            columns[field.Name] = column.Data;
+            var field = dataFields[k];
+            var dataColumn = await rowGroupReader.ReadColumnAsync(field);
+            row[field.Name] = dataColumn.Data.GetValue(j);
           }
-
-          var rowCount = columns.First().Value.Length;
-
-          for (int j = 0; j < rowCount; j++)
-          {
-            try
-            {
-              var firstName = columns["first_name"].GetValue(j)?.ToString() ?? string.Empty;
-              var lastName = columns["last_name"].GetValue(j)?.ToString() ?? string.Empty;
-              var email = columns["email"].GetValue(j)?.ToString() ?? string.Empty;
-              var gender = columns["gender"].GetValue(j)?.ToString() ?? string.Empty;
-              var country = columns["country"].GetValue(j)?.ToString() ?? string.Empty;
-              var title = columns["title"].GetValue(j)?.ToString() ?? string.Empty;
-              var comments = columns["comments"].GetValue(j)?.ToString() ?? string.Empty;
-
-              var registrationDateStr = columns["registration_dttm"].GetValue(j)?.ToString();
-              var birthDateStr = columns["birthdate"].GetValue(j)?.ToString();
-
-              DateTime? registrationDate = null;
-              DateTime? birthDate = null;
-
-              if (!string.IsNullOrEmpty(registrationDateStr))
-              {
-                if (DateTime.TryParse(registrationDateStr, out DateTime parsedDate))
-                {
-                  registrationDate = parsedDate;
-                }
-              }
-
-              if (!string.IsNullOrEmpty(birthDateStr))
-              {
-                if (DateTime.TryParse(birthDateStr, out DateTime parsedDate))
-                {
-                  birthDate = parsedDate;
-                }
-                else if (DateTime.TryParseExact(birthDateStr, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out DateTime exactDate))
-                {
-                  birthDate = exactDate;
-                }
-              }
-
-              var salary = Convert.ToDecimal(columns["salary"].GetValue(j));
-
-              users.Add(new UserData
-              {
-                FirstName = firstName,
-                LastName = lastName,
-                Email = email,
-                Gender = gender,
-                Country = country,
-                Title = title,
-                Comments = comments,
-                RegistrationDate = registrationDate ?? DateTime.MinValue,
-                BirthDate = birthDate ?? DateTime.MinValue,
-                Salary = salary
-              });
-            }
-            catch (Exception ex)
-            {
-              Console.WriteLine($"Error processing row {j}: {ex.Message}");
-              throw;
-            }
-          }
+          dataTable.Rows.Add(row);
         }
       }
 
-      return users;
+      // Cache the data
+      var cacheOptions = new MemoryCacheEntryOptions()
+          .SetAbsoluteExpiration(CACHE_DURATION)
+          .SetSlidingExpiration(TimeSpan.FromMinutes(10));
+
+      _cache.Set(CACHE_KEY, dataTable, cacheOptions);
+
+      return dataTable;
+    }
+
+    private Type GetClrType(Parquet.Data.DataType dataType)
+    {
+      switch (dataType)
+      {
+        case Parquet.Data.DataType.Int32:
+          return typeof(int);
+        case Parquet.Data.DataType.Int64:
+          return typeof(long);
+        case Parquet.Data.DataType.Float:
+          return typeof(float);
+        case Parquet.Data.DataType.Double:
+          return typeof(double);
+        case Parquet.Data.DataType.Boolean:
+          return typeof(bool);
+        case Parquet.Data.DataType.String:
+          return typeof(string);
+        case Parquet.Data.DataType.Date:
+          return typeof(DateTime);
+        case Parquet.Data.DataType.Time:
+          return typeof(TimeSpan);
+        case Parquet.Data.DataType.Timestamp:
+          return typeof(DateTime);
+        case Parquet.Data.DataType.Decimal:
+          return typeof(decimal);
+        default:
+          throw new NotSupportedException($"Data type {dataType} is not supported");
+      }
     }
   }
 }

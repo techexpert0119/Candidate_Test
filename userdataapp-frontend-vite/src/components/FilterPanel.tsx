@@ -176,6 +176,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             }
             onChange={handleCountryChange}
             isClearable
+            styles={{
+              menu: (base) => ({
+                ...base,
+                zIndex: 9999,
+              }),
+            }}
           />
         </Box>
       </Box>
